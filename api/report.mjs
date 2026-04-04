@@ -1,46 +1,55 @@
-// api/report.mjs
+// api/report.mjs — Node.js style untuk Vercel
 import { getStore } from "../lib/store.mjs";
 import crypto from "crypto";
-import { verifyToken, json, preflight } from "../lib/utils.mjs";
+import { verifyToken, setCors } from "../lib/utils.mjs";
 
-export default async function handler(req) {
-  if (req.method === "OPTIONS") return preflight();
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
+  // Auth
   let user;
-  try { user = verifyToken(req.headers.get("authorization")); }
-  catch (e) { return json({ error: "Unauthorized: " + e.message }, 401); }
+  try {
+    user = verifyToken(req.headers["authorization"]);
+  } catch (e) {
+    return res.status(401).json({ error: "Unauthorized: " + e.message });
+  }
 
-  let body;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  const { message } = req.body || {};
+  const msg = (message || "").trim();
 
-  const message = (body.message || "").trim();
-  if (!message) return json({ error: "Pesan tidak boleh kosong" }, 400);
-  if (message.length > 2000) return json({ error: "Pesan terlalu panjang (maks 2000 karakter)" }, 400);
+  if (!msg)
+    return res.status(400).json({ error: "Pesan tidak boleh kosong" });
+  if (msg.length > 2000)
+    return res.status(400).json({ error: "Pesan terlalu panjang (maks 2000 karakter)" });
 
   const store = getStore("nutrilog");
-  const id = "r_" + crypto.randomBytes(8).toString("hex");
+  const id    = "r_" + crypto.randomBytes(8).toString("hex");
+
   const report = {
     id,
-    userId: user.userId,
-    username: user.username,
-    message,
+    userId:    user.userId,
+    username:  user.username,
+    message:   msg,
     timestamp: new Date().toISOString(),
-    status: "open",
+    status:    "open",
   };
 
   await store.set(`reports/${id}`, JSON.stringify(report));
 
-  let index;
-  try { index = (await store.get("reports/index", { type: "json" })) || []; }
-  catch { index = []; }
-
+  let index = [];
+  try { index = (await store.get("reports/index", { type: "json" })) || []; } catch {}
   index.unshift({
-    id, userId: user.userId, username: user.username,
-    timestamp: report.timestamp, status: "open",
-    preview: message.slice(0, 120),
+    id,
+    userId:    user.userId,
+    username:  user.username,
+    timestamp: report.timestamp,
+    status:    "open",
+    preview:   msg.slice(0, 120),
   });
-
   await store.set("reports/index", JSON.stringify(index));
-  return json({ success: true, id });
+
+  return res.status(200).json({ success: true, id });
 }

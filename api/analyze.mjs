@@ -1,56 +1,70 @@
-// api/analyze.mjs
+// api/analyze.mjs — Node.js style untuk Vercel
 import { getStore } from "../lib/store.mjs";
-import { verifyToken, json, preflight } from "../lib/utils.mjs";
+import { verifyToken, setCors } from "../lib/utils.mjs";
 
-export default async function handler(req) {
-  if (req.method === "OPTIONS") return preflight();
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
+  // Auth
   let user;
-  try { user = verifyToken(req.headers.get("authorization")); }
-  catch (e) { return json({ error: "Unauthorized: " + e.message }, 401); }
-
-  const store = getStore("nutrilog");
-  const today = new Date().toISOString().split("T")[0];
-  const usageKey = `usage/${user.userId}/${today}`;
-
-  let cfg = {};
-  try { cfg = (await store.get("config/global", { type: "json" })) || {}; } catch {}
-  const dailyLimit = typeof cfg.dailyLimit === "number" ? cfg.dailyLimit : 5;
-
-  let todayUsage = 0;
-  try { const raw = (await store.get(usageKey)) || "0"; todayUsage = parseInt(raw, 10) || 0; } catch {}
-
-  if (todayUsage >= dailyLimit) {
-    return json({
-      error: "DAILY_LIMIT_REACHED",
-      message: `Anda sudah mencapai limit analisa foto harian (${dailyLimit} foto/hari). Analisa kembali besok atau hubungi admin untuk penambahan kuota.`,
-      limit: dailyLimit,
-      used: todayUsage,
-    }, 429);
+  try {
+    user = verifyToken(req.headers["authorization"]);
+  } catch (e) {
+    return res.status(401).json({ error: "Unauthorized: " + e.message });
   }
 
-  let apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) { try { apiKey = cfg.apiKey; } catch {} }
-  if (!apiKey) return json({ error: "API Key belum dikonfigurasi. Hubungi admin." }, 503);
+  const store = getStore("nutrilog");
+  const today    = new Date().toISOString().split("T")[0];
+  const usageKey = `usage/${user.userId}/${today}`;
 
-  let body;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  // Baca config global
+  let cfg = {};
+  try { cfg = (await store.get("config/global", { type: "json" })) || {}; } catch {}
+
+  const dailyLimit = typeof cfg.dailyLimit === "number" ? cfg.dailyLimit : 5;
+
+  // Baca usage hari ini
+  let todayUsage = 0;
+  try { todayUsage = parseInt((await store.get(usageKey)) || "0", 10) || 0; } catch {}
+
+  if (todayUsage >= dailyLimit) {
+    return res.status(429).json({
+      error:   "DAILY_LIMIT_REACHED",
+      message: `Anda sudah mencapai limit analisa foto harian (${dailyLimit} foto/hari). Analisa kembali besok atau hubungi admin untuk penambahan kuota.`,
+      limit:   dailyLimit,
+      used:    todayUsage,
+    });
+  }
+
+  // Resolve API key Anthropic
+  const apiKey = process.env.ANTHROPIC_API_KEY || cfg.apiKey;
+  if (!apiKey)
+    return res.status(503).json({ error: "API Key belum dikonfigurasi. Hubungi admin." });
+
+  const body = req.body || {};
 
   try {
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
+      method:  "POST",
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        "Content-Type":      "application/json",
+        "x-api-key":         apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(body),
     });
+
     const data = await upstream.json();
-    if (upstream.ok) await store.set(usageKey, String(todayUsage + 1));
-    return json(data, upstream.status);
+
+    if (upstream.ok) {
+      await store.set(usageKey, String(todayUsage + 1));
+    }
+
+    return res.status(upstream.status).json(data);
   } catch (err) {
-    return json({ error: "Gagal menghubungi Anthropic: " + err.message }, 502);
+    return res.status(502).json({ error: "Gagal menghubungi Anthropic: " + err.message });
   }
 }

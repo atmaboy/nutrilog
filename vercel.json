@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "api/auth.mjs":    { "runtime": "nodejs20.x" },
+    "api/meals.mjs":   { "runtime": "nodejs20.x" },
+    "api/analyze.mjs": { "runtime": "nodejs20.x" },
+    "api/report.mjs":  { "runtime": "nodejs20.x" },
+    "api/admin.mjs":   { "runtime": "nodejs20.x" }
+  }
+}

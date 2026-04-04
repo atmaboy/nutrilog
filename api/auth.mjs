@@ -1,34 +1,35 @@
-// api/auth.mjs
+// api/auth.mjs — Node.js style untuk Vercel
 import { getStore } from "../lib/store.mjs";
 import crypto from "crypto";
-import { hashPwd, signToken, json, preflight } from "../lib/utils.mjs";
+import { hashPwd, signToken, setCors } from "../lib/utils.mjs";
 
-export default async function handler(req) {
-  if (req.method === "OPTIONS") return preflight();
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
-  let body;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  const { action, username, password } = req.body || {};
 
-  const { action, username, password } = body;
-  if (!action || !username || !password) return json({ error: "Field tidak boleh kosong" }, 400);
+  if (!action || !username || !password)
+    return res.status(400).json({ error: "Field tidak boleh kosong" });
 
   const clean = username.trim().toLowerCase();
   if (!/^[a-z0-9_]{3,30}$/.test(clean))
-    return json({ error: "Username: 3\u201330 karakter, hanya huruf kecil, angka, underscore" }, 400);
+    return res.status(400).json({ error: "Username: 3\u201330 karakter, hanya huruf kecil, angka, underscore" });
 
   const store = getStore("nutrilog");
 
-  // REGISTER
+  // ── REGISTER ────────────────────────────────────────────────────────────
   if (action === "register") {
-    if (password.length < 6) return json({ error: "Password minimal 6 karakter" }, 400);
+    if (password.length < 6)
+      return res.status(400).json({ error: "Password minimal 6 karakter" });
 
-    let userIndex;
-    try { userIndex = (await store.get("users/index", { type: "json" })) || []; }
-    catch { userIndex = []; }
+    let userIndex = [];
+    try { userIndex = (await store.get("users/index", { type: "json" })) || []; } catch {}
 
-    if (userIndex.find(u => u.username === clean))
-      return json({ error: "Username sudah digunakan" }, 409);
+    if (userIndex.find((u) => u.username === clean))
+      return res.status(409).json({ error: "Username sudah digunakan" });
 
     const passwordHash = await hashPwd(password);
     const user = {
@@ -43,29 +44,34 @@ export default async function handler(req) {
     await store.set("users/index", JSON.stringify(userIndex));
 
     const token = signToken({ userId: user.id, username: user.username });
-    return json({ token, user: { id: user.id, username: user.username, createdAt: user.createdAt } });
+    return res.status(200).json({
+      token,
+      user: { id: user.id, username: user.username, createdAt: user.createdAt },
+    });
   }
 
-  // LOGIN
+  // ── LOGIN ────────────────────────────────────────────────────────────────
   if (action === "login") {
-    let userIndex;
-    try { userIndex = (await store.get("users/index", { type: "json" })) || []; }
-    catch { userIndex = []; }
+    let userIndex = [];
+    try { userIndex = (await store.get("users/index", { type: "json" })) || []; } catch {}
 
-    const meta = userIndex.find(u => u.username === clean);
-    if (!meta) return json({ error: "Username atau password salah" }, 401);
+    const meta = userIndex.find((u) => u.username === clean);
+    if (!meta)
+      return res.status(401).json({ error: "Username atau password salah" });
 
-    let userDetail;
-    try { userDetail = await store.get(`users/${meta.id}`, { type: "json" }); }
-    catch { return json({ error: "Username atau password salah" }, 401); }
+    let userDetail = null;
+    try { userDetail = await store.get(`users/${meta.id}`, { type: "json" }); } catch {}
 
     const hash = await hashPwd(password);
     if (!userDetail || userDetail.passwordHash !== hash)
-      return json({ error: "Username atau password salah" }, 401);
+      return res.status(401).json({ error: "Username atau password salah" });
 
     const token = signToken({ userId: userDetail.id, username: userDetail.username });
-    return json({ token, user: { id: userDetail.id, username: userDetail.username, createdAt: userDetail.createdAt } });
+    return res.status(200).json({
+      token,
+      user: { id: userDetail.id, username: userDetail.username, createdAt: userDetail.createdAt },
+    });
   }
 
-  return json({ error: "Unknown action" }, 400);
+  return res.status(400).json({ error: "Unknown action" });
 }
