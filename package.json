@@ -1,0 +1,9 @@
+{
+  "name": "nutrilog",
+  "version": "1.1.0",
+  "description": "NutriLog - AI Food Intelligence Tracker",
+  "type": "module",
+  "dependencies": {
+    "@vercel/kv": "^0.2.1"
+  }
+}
