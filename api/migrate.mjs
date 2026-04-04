@@ -1,10 +1,19 @@
 // api/migrate.mjs
 // ⚠️  MIGRATION ENDPOINT — HAPUS SETELAH MIGRASI SELESAI
-// Menerima export JSON dari Netlify lama dan menulis ke Supabase
 
 import { getStore } from "../lib/store.mjs";
 
 const MIGRATE_SECRET = process.env.MIGRATE_SECRET || "nutrilog-migrate-2024";
+
+function parseURL(req) {
+  // req.url di Vercel bisa berupa path saja (/api/migrate?...)
+  // atau full URL tergantung versi runtime. Kita handle keduanya.
+  try {
+    return new URL(req.url);
+  } catch {
+    return new URL(req.url, "https://nutrilog-rho.vercel.app");
+  }
+}
 
 export default async function handler(req) {
   const corsHeaders = {
@@ -17,22 +26,22 @@ export default async function handler(req) {
     return new Response("", { status: 200, headers: corsHeaders });
   }
 
-  const url = new URL(req.url);
+  const url = parseURL(req);
   const secret = url.searchParams.get("secret");
 
   if (secret !== MIGRATE_SECRET) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    return new Response(JSON.stringify({ error: "Unauthorized — pastikan MIGRATE_SECRET sudah diset di Vercel env" }), {
       status: 401,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
 
-  // ── GET: status check ──────────────────────────────────────────────────
+  // ── GET ────────────────────────────────────────────────────────────────
   if (req.method === "GET") {
     const action = url.searchParams.get("action");
 
+    // Server-to-server migration: fetch dari Netlify → tulis ke Supabase
     if (action === "fetch-and-migrate") {
-      // Server-to-server: fetch dari Netlify lalu langsung tulis ke Supabase
       const netlifyUrl = url.searchParams.get("netlifyUrl");
       const netlifySecret = url.searchParams.get("netlifySecret");
 
@@ -44,18 +53,17 @@ export default async function handler(req) {
       }
 
       try {
-        // Fetch data dari Netlify export endpoint
-        const exportUrl = `${netlifyUrl}/api/export-data?secret=${encodeURIComponent(netlifySecret)}`;
+        const exportUrl = netlifyUrl + "/api/export-data?secret=" + encodeURIComponent(netlifySecret);
+
         const exportRes = await fetch(exportUrl, {
           headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(55000), // 55 detik timeout
         });
 
         if (!exportRes.ok) {
           const errText = await exportRes.text();
           return new Response(
             JSON.stringify({
-              error: `Netlify export gagal (${exportRes.status}): ${errText.slice(0, 300)}`,
+              error: "Netlify export gagal (" + exportRes.status + "): " + errText.slice(0, 300),
             }),
             { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders } }
           );
@@ -71,17 +79,18 @@ export default async function handler(req) {
           );
         }
 
-        // Tulis ke Supabase
         const store = getStore("nutrilog");
         const entries = Object.entries(dataToMigrate);
-        const results = { success: [], failed: [] };
+        const successKeys = [];
+        const failedKeys = [];
 
         for (const [key, value] of entries) {
           try {
-            await store.set(key, typeof value === "string" ? value : JSON.stringify(value));
-            results.success.push(key);
+            const content = typeof value === "string" ? value : JSON.stringify(value);
+            await store.set(key, content);
+            successKeys.push(key);
           } catch (e) {
-            results.failed.push({ key, error: e.message });
+            failedKeys.push({ key: key, error: e.message });
           }
         }
 
@@ -89,10 +98,10 @@ export default async function handler(req) {
           JSON.stringify({
             ok: true,
             total: entries.length,
-            successCount: results.success.length,
-            failedCount: results.failed.length,
-            failed: results.failed,
-            successKeys: results.success,
+            successCount: successKeys.length,
+            failedCount: failedKeys.length,
+            failed: failedKeys,
+            successKeys: successKeys,
           }),
           { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
@@ -104,19 +113,16 @@ export default async function handler(req) {
       }
     }
 
-    // Default GET: cek status Supabase
+    // Default GET: cek koneksi Supabase
     try {
       const store = getStore("nutrilog");
       const userIndex = (await store.get("users/index", { type: "json" })) || [];
       return new Response(
         JSON.stringify({
           ok: true,
-          message: "Supabase terhubung",
+          message: "Supabase terhubung ✓",
           existingUsers: userIndex.length,
-          instructions: {
-            step1: "Deploy export-data.mjs ke Netlify lama",
-            step2: `Panggil: GET /api/migrate?secret=MIGRATE_SECRET&action=fetch-and-migrate&netlifyUrl=https://NAMA-NETLIFY.netlify.app&netlifySecret=EXPORT_SECRET`,
-          },
+          nextStep: "GET /api/migrate?secret=MIGRATE_SECRET&action=fetch-and-migrate&netlifyUrl=https://APP.netlify.app&netlifySecret=EXPORT_SECRET",
         }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
@@ -128,12 +134,12 @@ export default async function handler(req) {
     }
   }
 
-  // ── POST: terima JSON payload langsung (alternatif manual) ─────────────
+  // ── POST: terima JSON payload langsung ─────────────────────────────────
   if (req.method === "POST") {
     let body;
     try {
       body = await req.json();
-    } catch {
+    } catch (e) {
       return new Response(JSON.stringify({ error: "Invalid JSON" }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -144,21 +150,23 @@ export default async function handler(req) {
 
     if (!dataToMigrate || typeof dataToMigrate !== "object") {
       return new Response(
-        JSON.stringify({ error: "Body harus berisi { data: { key: value, ... } }" }),
+        JSON.stringify({ error: "Body harus berisi { data: { key: value } }" }),
         { status: 422, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
     const store = getStore("nutrilog");
     const entries = Object.entries(dataToMigrate);
-    const results = { success: [], failed: [] };
+    const successKeys = [];
+    const failedKeys = [];
 
     for (const [key, value] of entries) {
       try {
-        await store.set(key, typeof value === "string" ? value : JSON.stringify(value));
-        results.success.push(key);
+        const content = typeof value === "string" ? value : JSON.stringify(value);
+        await store.set(key, content);
+        successKeys.push(key);
       } catch (e) {
-        results.failed.push({ key, error: e.message });
+        failedKeys.push({ key: key, error: e.message });
       }
     }
 
@@ -166,9 +174,9 @@ export default async function handler(req) {
       JSON.stringify({
         ok: true,
         total: entries.length,
-        successCount: results.success.length,
-        failedCount: results.failed.length,
-        failed: results.failed,
+        successCount: successKeys.length,
+        failedCount: failedKeys.length,
+        failed: failedKeys,
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
