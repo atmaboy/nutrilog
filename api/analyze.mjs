@@ -20,11 +20,17 @@ export default async function handler(req, res) {
   const today    = new Date().toISOString().split("T")[0];
   const usageKey = `usage/${user.userId}/${today}`;
 
-  // Baca config global
+  // Baca config global + limit khusus user (jika ada)
   let cfg = {};
   try { cfg = (await store.get("config/global", { type: "json" })) || {}; } catch {}
 
-  const dailyLimit = typeof cfg.dailyLimit === "number" ? cfg.dailyLimit : 5;
+  let userDetail = null;
+  try { userDetail = await store.get(`users/${user.userId}`, { type: "json" }); } catch {}
+
+  const globalDailyLimit = typeof cfg.dailyLimit === "number" ? cfg.dailyLimit : 5;
+  const dailyLimit = typeof userDetail?.dailyLimit === "number" && userDetail.dailyLimit > 0
+    ? userDetail.dailyLimit
+    : globalDailyLimit;
 
   // Baca usage hari ini
   let todayUsage = 0;
@@ -36,6 +42,8 @@ export default async function handler(req, res) {
       message: `Anda sudah mencapai limit analisa foto harian (${dailyLimit} foto/hari). Analisa kembali besok atau hubungi admin untuk penambahan kuota.`,
       limit:   dailyLimit,
       used:    todayUsage,
+      globalLimit: globalDailyLimit,
+      hasCustomLimit: dailyLimit !== globalDailyLimit,
     });
   }
 

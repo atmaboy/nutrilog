@@ -79,6 +79,7 @@ if (req.method === "GET" && action === "get-maintenance-status") {
       let cfg = {};
       try { cfg = (await store.get("config/global", { type: "json" })) || {}; } catch {}
 
+      const globalDailyLimit = typeof cfg.dailyLimit === "number" ? cfg.dailyLimit : 5;
       const today = new Date().toDateString();
       let totalMeals = 0, totalCal = 0, todayMeals = 0;
 
@@ -87,14 +88,26 @@ if (req.method === "GET" && action === "get-maintenance-status") {
           let idx = [];
           try { idx = (await store.get(`meals/index/${u.id}`, { type: "json" })) || []; } catch {}
 
+          let detail = null;
+          try { detail = await store.get(`users/${u.id}`, { type: "json" }); } catch {}
+
           const kcal = idx.reduce((s, m) => s + (m.totalCalories || 0), 0);
           const td   = idx.filter((m) => new Date(m.timestamp).toDateString() === today).length;
+          const dailyLimitOverride = typeof detail?.dailyLimit === "number" && detail.dailyLimit > 0 ? detail.dailyLimit : null;
+          const effectiveDailyLimit = dailyLimitOverride || globalDailyLimit;
 
           totalMeals += idx.length;
           totalCal   += kcal;
           todayMeals += td;
 
-          return { ...u, totalMeals: idx.length, totalCalories: Math.round(kcal), recentMeals: idx.slice(0, 5) };
+          return {
+            ...u,
+            totalMeals: idx.length,
+            totalCalories: Math.round(kcal),
+            recentMeals: idx.slice(0, 5),
+            dailyLimitOverride,
+            effectiveDailyLimit,
+          };
         })
       );
 
@@ -155,6 +168,34 @@ if (req.method === "GET" && action === "get-maintenance-status") {
       cfg.dailyLimit = limit;
       await store.set("config/global", JSON.stringify(cfg));
       return res.status(200).json({ success: true, dailyLimit: limit });
+    }
+
+    // ── POST set-user-limit ───────────────────────────────────────────────────
+    if (req.method === "POST" && action === "set-user-limit") {
+      const { userId, dailyLimit } = req.body || {};
+      if (!userId) return res.status(400).json({ error: "userId required" });
+
+      let user = null;
+      try { user = await store.get(`users/${userId}`, { type: "json" }); } catch {}
+      if (!user) return res.status(404).json({ error: "User tidak ditemukan" });
+
+      let cfg = {};
+      try { cfg = (await store.get("config/global", { type: "json" })) || {}; } catch {}
+      const globalDailyLimit = typeof cfg.dailyLimit === "number" ? cfg.dailyLimit : 5;
+
+      if (dailyLimit === null) {
+        delete user.dailyLimit;
+        await store.set(`users/${userId}`, JSON.stringify(user));
+        return res.status(200).json({ success: true, dailyLimitOverride: null, effectiveDailyLimit: globalDailyLimit });
+      }
+
+      const parsedLimit = parseInt(dailyLimit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 9999)
+        return res.status(400).json({ error: "Limit user harus 1\u20139999" });
+
+      user.dailyLimit = parsedLimit;
+      await store.set(`users/${userId}`, JSON.stringify(user));
+      return res.status(200).json({ success: true, dailyLimitOverride: parsedLimit, effectiveDailyLimit: parsedLimit });
     }
 
     // ── POST change-pwd ───────────────────────────────────────────────────────

@@ -201,18 +201,6 @@
       #main{padding:16px 12px 40px;}
     }
   </style>
-
-  <!-- ═══ Vercel Web Analytics ═══ -->
-  <script>
-    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-  </script>
-  <script defer src="/_vercel/insights/script.js"></script>
-
-  <!-- ═══ Vercel Speed Insights ═══ -->
-  <script>
-    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-  </script>
-  <script defer src="/_vercel/speed-insights/script.js"></script>
 </head>
 <body>
 
@@ -271,11 +259,21 @@
       <div class="page-sub">Kelola semua akun pengguna NutriLog</div>
       <div id="user-detail">
         <div class="det-hdr"><div class="det-av" id="det-av">?</div><div><div class="det-name" id="det-name"></div><div class="det-sub" id="det-sub"></div></div><button class="det-close" onclick="closeDetail()">✕ Tutup</button></div>
+        <div class="settings-card" style="margin:14px 0 12px;padding:14px">
+          <div class="sc-title">📊 Limit Analisa User Ini</div>
+          <div class="sc-desc">Kosongkan atau reset agar user ini mengikuti limit default global.</div>
+          <div id="det-limit-status" class="status-row" style="margin-bottom:10px"></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input id="det-limit-inp" class="f-inp inp-flex" type="number" min="1" max="9999" placeholder="Limit custom" style="max-width:180px"/>
+            <button class="save-btn" id="det-limit-save-btn" onclick="saveUserLimit()">💾 Simpan Limit User</button>
+            <button class="save-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);width:auto" onclick="resetUserLimit()">↺ Ikuti Default</button>
+          </div>
+        </div>
         <div id="det-meals"></div>
       </div>
       <div class="tbl-wrap">
         <div class="tbl-hdr"><div class="tbl-title">Semua Pengguna</div><input class="search-inp" id="user-search" type="text" placeholder="Cari username…" oninput="filterUsers()"/></div>
-        <table><thead><tr><th>Username</th><th>Terdaftar</th><th>Catatan</th><th>Total Kalori</th><th>Aksi</th></tr></thead><tbody id="users-tbody"><tr><td colspan="5" class="empty-row">Memuat…</td></tr></tbody></table>
+        <table><thead><tr><th>Username</th><th>Terdaftar</th><th>Catatan</th><th>Total Kalori</th><th>Limit</th><th>Aksi</th></tr></thead><tbody id="users-tbody"><tr><td colspan="6" class="empty-row">Memuat…</td></tr></tbody></table>
       </div>
     </div>
 
@@ -294,7 +292,7 @@
     <!-- API KEY & LIMIT -->
     <div class="page" id="page-apikey">
       <div class="page-title">API Key & Limit Analisa</div>
-      <div class="page-sub">Kelola API Key dan limit analisa foto harian</div>
+      <div class="page-sub">Kelola API Key, limit default, dan limit analisa per user</div>
 
       <!-- API Key -->
       <div class="settings-card slide-up">
@@ -310,7 +308,7 @@
 
       <!-- Daily Limit -->
       <div class="settings-card slide-up" style="animation-delay:.1s">
-        <div class="sc-title">📊 Limit Analisa Foto per User per Hari</div>
+        <div class="sc-title">📊 Default Limit Analisa Foto Harian</div>
         <div class="sc-desc">Batasi jumlah analisa foto yang bisa dilakukan setiap pengguna per hari. Default: 5.</div>
         <div class="inp-row" style="align-items:center">
           <input id="limit-inp" class="f-inp inp-flex" type="number" min="1" max="9999" placeholder="5" style="max-width:140px"/>
@@ -419,7 +417,7 @@ function toggleAdminTheme() {
 
 const ADM_TOKEN_KEY = "nl_admin_token";
 let ADMIN_TOKEN = sessionStorage.getItem(ADM_TOKEN_KEY);
-let allUsers = [], statsData = null;
+let allUsers = [], statsData = null, currentDetailUserId = null;
 
 // ─── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
@@ -556,17 +554,30 @@ function renderUsers(filter="") {
         <td style="color:var(--muted);font-size:12px">${fmtDate(u.createdAt)}</td>
         <td><span class="badge bg-green">${u.totalMeals} catatan</span></td>
         <td style="color:var(--accent);font-weight:600">${(u.totalCalories||0).toLocaleString("id-ID")} kkal</td>
+        <td><span class="badge ${u.dailyLimitOverride ? 'bg-blue' : 'bg-green'}">${u.effectiveDailyLimit||statsData?.dailyLimit||5} foto/hari${u.dailyLimitOverride ? ' · custom' : ''}</span></td>
         <td><div class="btn-row"><button class="btn-tbl btn-view" onclick="viewUser('${u.id}')">👁 Detail</button><button class="btn-tbl btn-clear" onclick="clearMeals('${u.id}','${u.username}')">🧹</button><button class="btn-tbl btn-del" onclick="deleteUser('${u.id}','${u.username}')">🗑</button></div></td>
       </tr>`).join("")
-    : `<tr><td colspan="5" class="empty-row">Tidak ada pengguna</td></tr>`;
+    : `<tr><td colspan="6" class="empty-row">Tidak ada pengguna</td></tr>`;
 }
 function filterUsers() { renderUsers(d("user-search").value); }
 
+function renderUserLimitPanel(user) {
+  const globalLimit = statsData?.dailyLimit || 5;
+  const effective = user.effectiveDailyLimit || globalLimit;
+  d("det-limit-inp").value = user.dailyLimitOverride || "";
+  d("det-limit-inp").placeholder = `Default global: ${globalLimit}`;
+  d("det-limit-status").innerHTML = user.dailyLimitOverride
+    ? `<span class="ok">✓ Limit custom aktif: ${user.dailyLimitOverride} foto/hari</span><span style="color:var(--muted)"> · Default global ${globalLimit}/hari</span>`
+    : `<span style="color:var(--muted)">Mengikuti default global: <b style="color:var(--accent)">${effective}</b> foto/hari</span>`;
+}
+
 async function viewUser(uid) {
   const user=allUsers.find(u=>u.id===uid); if(!user) return;
+  currentDetailUserId = uid;
   d("det-av").textContent=user.username.charAt(0).toUpperCase();
   d("det-name").textContent=user.username;
-  d("det-sub").textContent=`Bergabung ${fmtDate(user.createdAt)} · ${user.totalMeals} catatan`;
+  d("det-sub").textContent=`Bergabung ${fmtDate(user.createdAt)} · ${user.totalMeals} catatan · limit ${user.effectiveDailyLimit||statsData?.dailyLimit||5} foto/hari`;
+  renderUserLimitPanel(user);
   d("det-meals").innerHTML=`<div class="empty-row">Memuat…</div>`;
   d("user-detail").classList.add("open");
   d("user-detail").scrollIntoView({behavior:"smooth",block:"nearest"});
@@ -582,7 +593,43 @@ async function viewUser(uid) {
       : `<div class="empty-row">Belum ada catatan makan</div>`;
   } catch(e) { d("det-meals").innerHTML=`<div class="empty-row">Gagal memuat: ${esc(e.message)}</div>`; }
 }
-function closeDetail() { d("user-detail").classList.remove("open"); }
+
+async function saveUserLimit() {
+  if(!currentDetailUserId) return;
+  const user = allUsers.find(u=>u.id===currentDetailUserId);
+  const val = parseInt(d("det-limit-inp").value, 10);
+  if (isNaN(val) || val < 1) { boToast("⚠️ Limit user harus minimal 1"); return; }
+  const btn = d("det-limit-save-btn"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const data = await adminApi("?action=set-user-limit", { method:"POST", body:JSON.stringify({ userId: currentDetailUserId, dailyLimit: val }) });
+    if (user) {
+      user.dailyLimitOverride = data.dailyLimitOverride;
+      user.effectiveDailyLimit = data.effectiveDailyLimit;
+      d("det-sub").textContent=`Bergabung ${fmtDate(user.createdAt)} · ${user.totalMeals} catatan · limit ${user.effectiveDailyLimit} foto/hari`;
+      renderUserLimitPanel(user);
+    }
+    renderUsers(d("user-search").value);
+    boToast(`✓ Limit custom untuk ${user?.username||'user'}: ${val} foto/hari`);
+  } catch(e) { boToast("⚠️ "+e.message); }
+  finally { btn.disabled = false; btn.textContent = '💾 Simpan Limit User'; }
+}
+
+async function resetUserLimit() {
+  if(!currentDetailUserId) return;
+  const user = allUsers.find(u=>u.id===currentDetailUserId);
+  try {
+    const data = await adminApi("?action=set-user-limit", { method:"POST", body:JSON.stringify({ userId: currentDetailUserId, dailyLimit: null }) });
+    if (user) {
+      user.dailyLimitOverride = null;
+      user.effectiveDailyLimit = data.effectiveDailyLimit;
+      d("det-sub").textContent=`Bergabung ${fmtDate(user.createdAt)} · ${user.totalMeals} catatan · limit ${user.effectiveDailyLimit} foto/hari`;
+      renderUserLimitPanel(user);
+    }
+    renderUsers(d("user-search").value);
+    boToast(`✓ ${user?.username||'User'} kembali mengikuti default global`);
+  } catch(e) { boToast("⚠️ "+e.message); }
+}
+function closeDetail() { currentDetailUserId = null; d("user-detail").classList.remove("open"); }
 
 async function deleteUser(uid,username) {
   if(!confirm(`Hapus akun "${username}" beserta semua data?`)) return;
@@ -651,7 +698,7 @@ async function saveApiKey() {
 
 // ─── DAILY LIMIT ───────────────────────────────────────────────────────────────
 async function loadLimitStatus() {
-  if(statsData) { d("limit-inp").value = statsData.dailyLimit||5; d("limit-status").innerHTML=`<span style="color:var(--muted)">Limit saat ini: <b style="color:var(--accent)">${statsData.dailyLimit||5}</b> foto/hari/user</span>`; }
+  if(statsData) { d("limit-inp").value = statsData.dailyLimit||5; d("limit-status").innerHTML=`<span style="color:var(--muted)">Limit default saat ini: <b style="color:var(--accent)">${statsData.dailyLimit||5}</b> foto/hari/user</span>`; }
 }
 async function saveLimit() {
   const val=parseInt(d("limit-inp").value,10);
@@ -659,9 +706,20 @@ async function saveLimit() {
   const btn=d("limit-save-btn"); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
   try {
     await adminApi("?action=set-limit",{method:"POST",body:JSON.stringify({dailyLimit:val})});
-    d("limit-status").innerHTML=`<span class="ok">✓ Limit diperbarui: ${val} foto/hari/user</span>`;
-    if(statsData) statsData.dailyLimit=val;
-    boToast(`✓ Limit analisa: ${val} foto/hari`);
+    d("limit-status").innerHTML=`<span class="ok">✓ Limit default diperbarui: ${val} foto/hari</span>`;
+    if(statsData) {
+      statsData.dailyLimit=val;
+      allUsers = allUsers.map(u => u.dailyLimitOverride ? u : ({ ...u, effectiveDailyLimit: val }));
+      renderUsers(d("user-search").value);
+      if (currentDetailUserId) {
+        const user = allUsers.find(u=>u.id===currentDetailUserId);
+        if (user) {
+          d("det-sub").textContent=`Bergabung ${fmtDate(user.createdAt)} · ${user.totalMeals} catatan · limit ${user.effectiveDailyLimit} foto/hari`;
+          renderUserLimitPanel(user);
+        }
+      }
+    }
+    boToast(`✓ Limit default analisa: ${val} foto/hari`);
   } catch(e) { boToast("⚠️ "+e.message); }
   finally { btn.disabled=false; btn.textContent="💾 Simpan"; }
 }
