@@ -260,7 +260,27 @@
     .ib-sub{font-size:11px;color:var(--text-muted);margin-top:1px;}
     .ib-btn{background:var(--accent);color:#081520;font-weight:700;font-size:13px;padding:8px 14px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;}
     .ib-close{background:transparent;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;padding:2px 4px;}
-  </style>
+  
+    /* ── RE-ANALYZE PANEL ──────────────────────────────────────────────────── */
+    .reanalyze-btn{display:flex;align-items:center;gap:6px;padding:8px 13px;border-radius:11px;font-size:12px;font-weight:600;background:rgba(251,176,64,.1);border:1px solid rgba(251,176,64,.28);color:#FBB040;cursor:pointer;transition:opacity .18s,transform .12s;white-space:nowrap;}
+    .reanalyze-btn:hover{opacity:.85;transform:scale(.98)}
+    .reanalyze-panel{background:var(--surface2);border:1px solid var(--border2);border-radius:15px;padding:14px;margin-bottom:12px;display:none}
+    .reanalyze-panel.open{display:block}
+    .reanalyze-textarea{width:100%;min-height:72px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;line-height:1.5;resize:vertical;font-family:inherit;box-sizing:border-box}
+    .reanalyze-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(61,255,149,.12)}
+    .reanalyze-hint{font-size:11px;color:var(--text-muted);margin-top:5px;line-height:1.5}
+    /* ── WEIGHT BADGE pada dish card ──────────────────────────────────────── */
+    .dish-weight{display:inline-flex;align-items:center;gap:3px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.25);border-radius:99px;padding:2px 8px;color:#60A5FA;font-size:11px;font-weight:600}
+    /* ── PER-DISH RE-ANALYZE ROW ─────────────────────────────────────────── */
+    .dish-reanalyze-row{display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);align-items:center}
+    .btn-reanalyze-dish{flex:1;padding:7px 10px;border-radius:9px;font-size:12px;font-weight:700;background:rgba(61,255,149,.08);border:1px solid rgba(61,255,149,.2);color:var(--accent);cursor:pointer;transition:opacity .18s}
+    .btn-reanalyze-dish:hover{opacity:.8}
+    .btn-weight-apply{padding:7px 12px;border-radius:9px;font-size:12px;font-weight:700;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.25);color:#60A5FA;cursor:pointer;white-space:nowrap;transition:opacity .18s}
+    .btn-weight-apply:hover{opacity:.8}
+    /* ── DISH LOADING STATE ───────────────────────────────────────────────── */
+    .dish-card.analyzing{opacity:.45;pointer-events:none;position:relative}
+    .dish-card.analyzing::after{content:'🔄 Menganalisa...';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--accent);background:rgba(5,14,20,.6);border-radius:14px}
+</style>
 
   <!-- ═══ Vercel Web Analytics ═══ -->
   <script>
@@ -389,11 +409,30 @@
       <div id="act-error" class="error-box" style="display:none"></div>
       <div id="act-warn" class="warn-box" style="display:none"><span class="warn-ico">⚠️</span><span id="act-warn-msg"></span></div>
       <div id="act-result" style="display:none">
+        <!-- ── RE-ANALYZE PANEL ────────────────────────────────────────────── -->
+        <div class="reanalyze-panel" id="reanalyze-panel">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+            <span style="font-size:16px">🔄</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text)">Koreksi & Analisa Ulang</div>
+              <div style="font-size:11px;color:var(--text-muted)">Tidak perlu foto ulang — AI akan analisa gambar yang sama dengan koreksimu</div>
+            </div>
+          </div>
+          <textarea class="reanalyze-textarea" id="reanalyze-input" placeholder="Contoh: Ini nasi goreng kampung dengan telur, bukan nasi putih biasa. Ada juga ayam goreng dan tempe bacem di sampingnya."></textarea>
+          <div class="reanalyze-hint">💡 Jelaskan nama menu yang benar, bahan-bahan, atau apapun yang menurutmu kurang tepat dari hasil analisa sebelumnya.</div>
+          <div class="edit-acts" style="margin-top:10px">
+            <button class="btn-sm" style="background:var(--accent);color:#081520;flex:1;padding:10px" onclick="doReanalyzeFood()">🔄 Analisa Ulang Sekarang</button>
+            <button class="btn-sm" style="background:var(--border);color:var(--text-muted)" onclick="closeReanalyzePanel()">Batal</button>
+          </div>
+        </div>
         <!-- Total nutri -->
         <div class="nutri-card slide-up">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;gap:6px">
             <div class="sec-label" style="margin:0">Total Kandungan Gizi</div>
-            <button class="btn-sm" style="background:var(--border2);color:var(--text-sub);" onclick="toggleTotalEdit()">✏️ Edit</button>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="reanalyze-btn" onclick="openReanalyzePanel()" title="Koreksi nama/deskripsi menu lalu analisa ulang tanpa foto baru">🔄 Koreksi</button>
+              <button class="btn-sm" style="background:var(--border2);color:var(--text-sub);" onclick="toggleTotalEdit()">✏️ Edit</button>
+            </div>
           </div>
           <div class="nutri-grid" id="r-badges"></div>
           <div class="health-row" id="r-health"></div>
@@ -755,11 +794,12 @@ Tentukan:
 3. image_warning: pesan peringatan dalam Bahasa Indonesia (kosong jika tidak ada masalah)
 
 Balas HANYA dengan JSON valid tanpa markdown:
-{"is_food":true,"low_resolution":false,"image_warning":"","dishes":[{"name":"","portion":"","calories":0,"protein_g":0,"carbs_g":0,"fat_g":0,"fiber_g":0,"notes":""}],"total_calories":0,"total_protein_g":0,"total_carbs_g":0,"total_fat_g":0,"total_fiber_g":0,"meal_assessment":"ringkasan singkat bahasa Indonesia","health_score":7}
+{"is_food":true,"low_resolution":false,"image_warning":"","dishes":[{"name":"","portion":"","weight_g":150,"calories":0,"protein_g":0,"carbs_g":0,"fat_g":0,"fiber_g":0,"notes":""}],"total_calories":0,"total_protein_g":0,"total_carbs_g":0,"total_fat_g":0,"total_fiber_g":0,"meal_assessment":"ringkasan singkat bahasa Indonesia","health_score":7}
 
 Aturan:
 - Jika is_food=false: isi image_warning, dishes kosong [], semua total=0
 - Jika low_resolution=true: isi image_warning, tetap estimasi gizi semampunya
+- weight_g: estimasi berat/gramasi setiap menu dalam gram (realistis, mis: nasi putih 1 centong = 100g)
 - health_score 1-10, output HANYA JSON`,
         messages: [{ role: "user", content: [
           { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
@@ -823,24 +863,40 @@ function healthHTML(score) {
 }
 
 function dishEditHTML(d, i) {
+  const wg = d.weight_g || 0;
   return `<div class="dish-card slide-up" id="dc-${i}" style="animation-delay:${(i*.06).toFixed(2)}s">
     <div class="dish-hdr"><div><div class="dish-name">${esc(d.name)}</div><div class="dish-portion">${esc(d.portion||"")}</div></div><div class="dish-kcal">${d.calories} kal</div></div>
-    <div class="dish-macros"><span class="mtag" style="color:#7ECFB4;background:#7ECFB418">P: ${d.protein_g}g</span><span class="mtag" style="color:#FBB040;background:#FBB04018">K: ${d.carbs_g}g</span><span class="mtag" style="color:#F87171;background:#F8717118">L: ${d.fat_g}g</span></div>
+    <div class="dish-macros">
+      <span class="mtag" style="color:#7ECFB4;background:#7ECFB418">P: ${d.protein_g}g</span>
+      <span class="mtag" style="color:#FBB040;background:#FBB04018">K: ${d.carbs_g}g</span>
+      <span class="mtag" style="color:#F87171;background:#F8717118">L: ${d.fat_g}g</span>
+      ${wg > 0 ? `<span class="dish-weight">⚖️ ${wg}g</span>` : ""}
+    </div>
     ${d.notes ? `<div class="dish-notes">${esc(d.notes)}</div>` : ""}
     <div style="display:flex;gap:6px;margin-top:8px">
       <button class="btn-sm" style="background:var(--border);color:var(--text-sub)" onclick="toggleDE(${i})">✏️ Edit</button>
       <button class="btn-sm" style="background:rgba(248,113,113,.12);color:#F87171" onclick="removeDish(${i})">🗑</button>
     </div>
     <div class="edit-panel" id="ep-${i}">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">✏️ Edit Data Menu</div>
       <div class="edit-row"><span class="edit-lbl">Nama</span><input class="edit-inp" id="en-${i}" type="text" value="${esc(d.name)}"/></div>
       <div class="edit-row"><span class="edit-lbl">Porsi</span><input class="edit-inp" id="ep2-${i}" type="text" value="${esc(d.portion||"")}"/></div>
+      <div class="edit-row">
+        <span class="edit-lbl">Berat</span>
+        <input class="edit-inp" id="ew-${i}" type="number" min="0" value="${wg}" placeholder="gram"/>
+        <span style="color:var(--text-muted);font-size:12px">g</span>
+      </div>
       <div class="edit-row"><span class="edit-lbl">Kalori</span><input class="edit-inp" id="ek-${i}" type="number" value="${d.calories}"/><span style="color:var(--text-muted);font-size:12px">kal</span></div>
       <div class="edit-row"><span class="edit-lbl">Protein</span><input class="edit-inp" id="epr-${i}" type="number" value="${d.protein_g}"/><span style="color:var(--text-muted);font-size:12px">g</span></div>
       <div class="edit-row"><span class="edit-lbl">Karbo</span><input class="edit-inp" id="ec-${i}" type="number" value="${d.carbs_g}"/><span style="color:var(--text-muted);font-size:12px">g</span></div>
       <div class="edit-row"><span class="edit-lbl">Lemak</span><input class="edit-inp" id="ef-${i}" type="number" value="${d.fat_g}"/><span style="color:var(--text-muted);font-size:12px">g</span></div>
       <div class="edit-acts">
-        <button class="btn-sm" style="background:var(--accent);color:#081520;flex:1" onclick="applyDE(${i})">✓ Simpan</button>
+        <button class="btn-sm" style="background:var(--accent);color:#081520;flex:1" onclick="applyDE(${i})">✓ Simpan Manual</button>
         <button class="btn-sm" style="background:var(--border);color:var(--text-muted)" onclick="toggleDE(${i})">Batal</button>
+      </div>
+      <div class="dish-reanalyze-row">
+        <button class="btn-weight-apply" onclick="applyWeightChange(${i})" title="Hitung ulang gizi berdasarkan berat baru (proporsional)">⚖️ Hitung Ulang Berat</button>
+        <button class="btn-reanalyze-dish" onclick="reanalyzeDish(${i})" title="Minta AI analisa ulang menu ini dengan nama & berat yang sudah diedit">🔄 Analisa Ulang Menu Ini</button>
       </div>
     </div>
   </div>`;
@@ -859,6 +915,7 @@ function toggleDE(i) { g(`ep-${i}`).classList.toggle("open"); }
 function applyDE(i) {
   const d = currentResult.dishes[i];
   d.name = g(`en-${i}`).value.trim() || d.name; d.portion = g(`ep2-${i}`).value.trim();
+  const newW = parseFloat(g(`ew-${i}`).value); if (!isNaN(newW) && newW >= 0) d.weight_g = newW;
   d.calories = parseFloat(g(`ek-${i}`).value)||0; d.protein_g = parseFloat(g(`epr-${i}`).value)||0;
   d.carbs_g = parseFloat(g(`ec-${i}`).value)||0; d.fat_g = parseFloat(g(`ef-${i}`).value)||0;
   recalc(); g("r-dishes").innerHTML = currentResult.dishes.map((d,i) => dishEditHTML(d,i)).join(""); showToast("✓ Menu diperbarui");
@@ -1037,6 +1094,123 @@ function show(id, v) { g(id).style.display = v ? "block" : "none"; }
 function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function formatDate(iso) { return new Date(iso).toLocaleDateString("id-ID",{weekday:"long",day:"numeric",month:"long",year:"numeric"}); }
 function formatTime(iso) { return new Date(iso).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"}); }
+
+// ─── RE-ANALYZE FOOD (Koreksi tanpa foto ulang) ─────────────────────────────
+function openReanalyzePanel() {
+  const panel = g("reanalyze-panel");
+  panel.classList.add("open");
+  setTimeout(() => g("reanalyze-input").focus(), 80);
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function closeReanalyzePanel() {
+  g("reanalyze-panel").classList.remove("open");
+  g("reanalyze-input").value = "";
+}
+async function doReanalyzeFood() {
+  const correction = (g("reanalyze-input").value || "").trim();
+  if (!correction) { showToast("⚠️ Tuliskan koreksi menu makanannya dulu"); g("reanalyze-input").focus(); return; }
+  if (!currentDataUrl) { showToast("⚠️ Tidak ada foto aktif"); return; }
+  closeReanalyzePanel();
+  show("act-result", false); show("act-loading", true); show("act-error", false); show("act-warn", false);
+  try {
+    const b64  = currentDataUrl.split(",")[1];
+    const mime = currentDataUrl.split(";")[0].split(":")[1];
+    const data = await api("/analyze", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1400,
+        system: `Kamu adalah ahli gizi profesional. Analisis ulang gambar makanan yang diberikan dengan memperhatikan koreksi dari pengguna.
+
+Balas HANYA dengan JSON valid tanpa markdown:
+{"is_food":true,"low_resolution":false,"image_warning":"","dishes":[{"name":"","portion":"","weight_g":150,"calories":0,"protein_g":0,"carbs_g":0,"fat_g":0,"fiber_g":0,"notes":""}],"total_calories":0,"total_protein_g":0,"total_carbs_g":0,"total_fat_g":0,"total_fiber_g":0,"meal_assessment":"ringkasan singkat bahasa Indonesia","health_score":7}
+
+Aturan:
+- Koreksi pengguna adalah PRIORITAS UTAMA dalam mengidentifikasi nama & jenis makanan
+- Estimasi weight_g setiap menu dalam gram secara realistis
+- health_score 1-10, output HANYA JSON`,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
+          { type: "text", text: `Analisis ulang gambar ini. Koreksi dari pengguna: "${correction}"` }
+        ]}]
+      })
+    });
+    const raw = (data.content || []).map(b => b.text || "").join("").replace(/\`\`\`json|\`\`\`/g, "").trim();
+    const parsed = JSON.parse(raw);
+    currentResult = parsed;
+    show("act-loading", false);
+    renderResult(currentResult);
+    show("act-result", true);
+    showToast("✅ Analisa berhasil diperbarui!");
+  } catch(e) {
+    show("act-loading", false);
+    renderResult(currentResult);
+    show("act-result", true);
+    showToast("❌ Gagal analisa ulang: " + (e.message || "error"));
+  }
+}
+
+// ─── HITUNG ULANG BERAT (proporsional, tanpa AI) ────────────────────────────
+function applyWeightChange(i) {
+  const d = currentResult.dishes[i];
+  const newW = parseFloat(g(`ew-${i}`).value);
+  if (isNaN(newW) || newW <= 0) { showToast("⚠️ Masukkan berat yang valid (> 0 gram)"); return; }
+  const oldW = d.weight_g || 100;
+  if (oldW > 0) {
+    const ratio = newW / oldW;
+    d.calories  = Math.round(d.calories  * ratio);
+    d.protein_g = Math.round(d.protein_g * ratio * 10) / 10;
+    d.carbs_g   = Math.round(d.carbs_g   * ratio * 10) / 10;
+    d.fat_g     = Math.round(d.fat_g     * ratio * 10) / 10;
+    d.fiber_g   = Math.round((d.fiber_g || 0) * ratio * 10) / 10;
+  }
+  d.weight_g = newW;
+  g(`ep-${i}`).classList.remove("open");
+  recalc();
+  g("r-dishes").innerHTML = currentResult.dishes.map((dd, ii) => dishEditHTML(dd, ii)).join("");
+  showToast(`⚖️ Berat diubah ke ${newW}g — gizi dihitung ulang`);
+}
+
+// ─── ANALISA ULANG PER-DISH dengan AI ───────────────────────────────────────
+async function reanalyzeDish(i) {
+  if (!currentDataUrl) { showToast("⚠️ Tidak ada foto aktif"); return; }
+  const d = currentResult.dishes[i];
+  const editedName = (g(`en-${i}`).value || "").trim() || d.name;
+  const editedW    = parseFloat(g(`ew-${i}`).value) || d.weight_g || 100;
+  const card = g(`dc-${i}`);
+  card.classList.add("analyzing");
+  try {
+    const b64  = currentDataUrl.split(",")[1];
+    const mime = currentDataUrl.split(";")[0].split(":")[1];
+    const data = await api("/analyze", {
+      method: "POST",
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 600,
+        system: `Kamu adalah ahli gizi profesional. Hitung nilai gizi untuk SATU item makanan spesifik.
+
+Balas HANYA dengan JSON valid tanpa markdown:
+{"name":"","portion":"","weight_g":0,"calories":0,"protein_g":0,"carbs_g":0,"fat_g":0,"fiber_g":0,"notes":""}`,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
+          { type: "text", text: `Hitung nilai gizi untuk item makanan: "${editedName}", berat: ${editedW}g. Fokus hanya pada item ini, abaikan makanan lain di foto.` }
+        ]}]
+      })
+    });
+    const raw = (data.content || []).map(b => b.text || "").join("").replace(/\`\`\`json|\`\`\`/g, "").trim();
+    const updated = JSON.parse(raw);
+    currentResult.dishes[i] = { ...currentResult.dishes[i], ...updated, weight_g: editedW };
+    card.classList.remove("analyzing");
+    g(`ep-${i}`).classList.remove("open");
+    recalc();
+    g("r-dishes").innerHTML = currentResult.dishes.map((dd, ii) => dishEditHTML(dd, ii)).join("");
+    showToast(`✅ "${editedName}" berhasil dianalisa ulang`);
+  } catch(e) {
+    card.classList.remove("analyzing");
+    showToast("❌ Gagal analisa ulang menu: " + (e.message || "error"));
+  }
+}
+
 </script>
 </body>
 </html>
